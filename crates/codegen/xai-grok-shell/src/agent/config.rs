@@ -1868,6 +1868,28 @@ impl Config {
             );
         }
         config.config_models = config_models;
+        // Inject env-defined model (GROK_MODEL_*) if present.
+        // This runs after config_models so the env override has the highest
+        // priority — it can't be overridden by config.toml.
+        if let Some((env_key, env_override)) = crate::agent::env_model_override::build_env_model_override() {
+            tracing::info!(
+                model_key = % env_key,
+                "env model override: injecting into config_models"
+            );
+            config.config_models.insert(env_key, env_override);
+        }
+        // Bridge GROK_DEFAULT_MODEL into models.default so the agent stdio/leader
+        // code path (which reads models.default, not default_model()) picks it up.
+        if config.models.default.is_none() {
+            if let Some(default_model) = xai_grok_models::env_default_model() {
+                config.models.default = Some(default_model.to_owned());
+                tracing::info!(
+                    default_model = % default_model,
+                    "GROK_DEFAULT_MODEL: setting models.default"
+                );
+            }
+        }
+
         config.model_override_warnings = model_override_warnings;
         if config.grok_com_config.oidc.is_none() {
             config.grok_com_config.oidc = OidcAuthConfig::from_env();
