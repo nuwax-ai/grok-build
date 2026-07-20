@@ -61,22 +61,16 @@ pub fn build_env_model_override() -> Option<(String, ConfigModelOverride)> {
     let model_name = def.model_name.clone();
 
     // ── API backend ───────────────────────────────────────────────────
-    let api_backend =
-        def.api_backend
-            .as_deref()
-            .and_then(|v| match v.to_ascii_lowercase().as_str() {
-                "chat_completions" => Some(ApiBackend::ChatCompletions),
-                "responses" => Some(ApiBackend::Responses),
-                "messages" => Some(ApiBackend::Messages),
-                _ => {
-                    tracing::warn!(
-                        "GROK_MODEL_API_BACKEND: unrecognized value '{}', \
-                         expected chat_completions | responses | messages",
-                        v
-                    );
-                    None
-                }
-            });
+    let api_backend = def.api_backend.as_deref().and_then(|v| {
+        v.parse::<ApiBackend>().ok().or_else(|| {
+            tracing::warn!(
+                "GROK_MODEL_API_BACKEND: unrecognized value '{}', \
+                 expected chat_completions | responses | messages",
+                v
+            );
+            None
+        })
+    });
 
     let extra_headers: indexmap::IndexMap<String, String> = def
         .extra_headers

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::num::NonZeroU64;
+use std::str::FromStr;
 
 // ============================================================================
 // TraceContext — cloneable, type-erased context for request tracing
@@ -1026,6 +1027,28 @@ impl ApiBackend {
     /// so structured output there goes through the StructuredOutput tool.
     pub fn supports_native_schema(&self) -> bool {
         matches!(self, Self::ChatCompletions | Self::Responses)
+    }
+}
+
+impl FromStr for ApiBackend {
+    type Err = String;
+
+    /// Parse a string into an [`ApiBackend`] variant (case-insensitive).
+    ///
+    /// Recognised values:
+    /// - `"chat_completions"` → [`ChatCompletions`](ApiBackend::ChatCompletions)
+    /// - `"responses"` → [`Responses`](ApiBackend::Responses)
+    /// - `"messages"` → [`Messages`](ApiBackend::Messages)
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "chat_completions" => Ok(Self::ChatCompletions),
+            "responses" => Ok(Self::Responses),
+            "messages" => Ok(Self::Messages),
+            other => Err(format!(
+                "unrecognized API backend '{}'; expected chat_completions | responses | messages",
+                other
+            )),
+        }
     }
 }
 
