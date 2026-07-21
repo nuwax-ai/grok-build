@@ -1,0 +1,22 @@
+# Publish a BETA release to npm.
+#
+# Triggered by tags matching `v*-beta*` (e.g. v0.2.107-beta.1).
+# Publishes all packages with the `beta` dist-tag, so users opt in explicitly:
+#   npm install -g nuwax-grok-build@beta
+
+name: publish-beta
+
+on:
+  push:
+    tags:
+      - 'v*-beta*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    uses: ./.github/workflows/_build-and-publish.yml
+    with:
+      npm-tag: beta
+    secrets: inherit

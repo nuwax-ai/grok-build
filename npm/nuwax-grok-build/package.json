@@ -1,0 +1,39 @@
+{
+  "name": "nuwax-grok-build",
+  "version": "0.0.0",
+  "description": "Grok Build CLI — an agentic coding tool powered by a native Rust binary. This package is a thin launcher; the actual binary is provided by per-platform optional dependencies.",
+  "license": "Apache-2.0",
+  "author": "nuwax-ai",
+  "homepage": "https://github.com/nuwax-ai/grok-build",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nuwax-ai/grok-build.git",
+    "directory": "npm/nuwax-grok-build"
+  },
+  "bugs": {
+    "url": "https://github.com/nuwax-ai/grok-build/issues"
+  },
+  "keywords": [
+    "grok",
+    "cli",
+    "agent",
+    "ai",
+    "tui"
+  ],
+  "bin": {
+    "grok": "bin.js"
+  },
+  "files": [
+    "bin.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "nuwax-grok-build-darwin-arm64": "0.0.0",
+    "nuwax-grok-build-darwin-x64": "0.0.0",
+    "nuwax-grok-build-linux-arm64": "0.0.0",
+    "nuwax-grok-build-linux-x64": "0.0.0",
+    "nuwax-grok-build-win32-x64": "0.0.0"
+  }
+}

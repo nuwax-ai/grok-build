@@ -1,0 +1,24 @@
+# Publish a STABLE release to npm.
+#
+# Triggered by tags matching `v*` (e.g. v0.2.107). The `if` guard skips beta
+# tags (which also match `v*`) so beta and stable workflows never both fire.
+# Publishes all packages with the `latest` dist-tag (the default), so:
+#   npm install -g nuwax-grok-build
+
+name: publish-stable
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: ${{ !contains(github.ref_name, '-beta') }}
+    uses: ./.github/workflows/_build-and-publish.yml
+    with:
+      npm-tag: latest
+    secrets: inherit

@@ -1,0 +1,72 @@
+# npm distribution for `nuwax-grok-build`
+
+This directory holds the npm packaging layer for the Grok Build CLI. The CLI
+itself is a native Rust binary (`xai-grok-pager`, installed as `grok`); these
+packages make it installable from npm.
+
+## Layout
+
+```
+npm/
+  nuwax-grok-build/                 # main package — a thin Node launcher
+    package.json                    #   bin.grok + optionalDependencies
+    bin.js                          #   picks the right platform binary, spawns it
+  nuwax-grok-build-<os>-<arch>/     # one platform sub-package each
+    package.json                    #   os/cpu constraints so npm only fetches a match
+    index.js                        #   exports the absolute path to the bundled binary
+    bin/                            #   (filled by CI with the compiled `grok` binary)
+  scripts/
+    set-version.mjs                 # stamps the release version into every package.json
+```
+
+Platform sub-packages: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`,
+`win32-x64`.
+
+## How it works
+
+1. `npm install -g nuwax-grok-build` installs the main package plus, as an
+   **optional dependency**, exactly the one platform sub-package matching the
+   user's OS/arch. npm skips the others thanks to the `os`/`cpu` fields, so the
+   install stays small and works offline (no postinstall download).
+2. Running `grok` executes `bin.js`, which requires the platform sub-package to
+   get its binary path and spawns it with inherited stdio — the TUI behaves
+   exactly like a direct invocation.
+
+## Releasing
+
+Releases are **tag-triggered** (the git tag is the single source of truth for
+the version). There are two pipelines under `.github/workflows/`:
+
+| Tag                   | Workflow              | npm dist-tag | Install                              |
+|-----------------------|-----------------------|--------------|--------------------------------------|
+| `v0.2.107-beta.1`     | `publish-beta.yml`    | `beta`       | `npm i -g nuwax-grok-build@beta`     |
+| `v0.2.107`            | `publish-stable.yml`  | `latest`     | `npm i -g nuwax-grok-build`          |
+
+Both call the reusable `_build-and-publish.yml`, which:
+
+1. Derives the version from the tag (strips the leading `v`) and bakes it into
+   the binary via `GROK_VERSION`.
+2. Builds `cargo build -p xai-grok-pager-bin --release` on one runner per
+   platform, stages each binary into its sub-package, and `npm publish`es it.
+3. Publishes the main package last, once all platform packages exist.
+
+### First-time setup
+
+- Create an npm **automation/granular access token** with publish rights for
+  `nuwax-grok-build` and the five `nuwax-grok-build-*` names, and add it as the
+  `NPM_TOKEN` repository (or organization) secret.
+- Confirm the six package names are available on the registry before first push.
+- Cut a tag and push it: `git tag v0.2.107-beta.1 && git push origin v0.2.107-beta.1`.
+
+### Notes / caveats
+
+- **Windows is best-effort.** Its matrix leg uses `continue-on-error`, so a
+  Windows build failure does not block the macOS/Linux release. Until it builds
+  cleanly, Windows users get an optional-dependency warning and no binary.
+- **Linux arm64** builds natively on `ubuntu-24.04-arm` (free for public repos).
+  If that runner is unavailable, switch that leg to `ubuntu-24.04` and
+  cross-compile with `cross` (or a `gcc-aarch64-linux-gnu` linker) instead.
+- `cargo build --locked` requires the committed `Cargo.lock` to match the
+  generated workspace. If a release fails on the lockfile, drop `--locked`.
+- `protoc` is required at build time (strict under `GITHUB_ACTIONS=true`); the
+  workflow installs it via `arduino/setup-protoc`.

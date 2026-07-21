@@ -1,3 +1,8 @@
 /target
 **/*.rs.bk
 .DS_Store
+
+# npm packaging artifacts — CI stages binaries here; never commit them
+/stage/
+npm/**/node_modules/
+*.tgz

@@ -1,0 +1,149 @@
+# Reusable workflow: builds the native xai-grok-pager binary for every
+# supported platform, wraps each in its npm sub-package, and publishes to npm.
+#
+# Called by publish-beta.yml (npm-tag: beta) and publish-stable.yml (npm-tag: latest).
+# Expected to be triggered by a git tag push (GITHUB_REF_NAME == tag name).
+
+name: Build and publish (npm)
+
+on:
+  workflow_call:
+    inputs:
+      npm-tag:
+        description: npm dist-tag to publish under (e.g. "beta" or "latest").
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # Derive the release version from the git tag (strip leading "v") and validate it.
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.+].*)?$'; then
+            echo "::error::ref '$TAG' is not a version tag (expected vX.Y.Z or vX.Y.Z-prerelease)"
+            exit 1
+          fi
+          echo "Resolved version: $VERSION (from tag $TAG)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  # Build + publish one platform sub-package per matrix leg. Runs natively on a
+  # matching runner to avoid cross-compilation headaches with pty/fsnotify/gix.
+  build-and-publish-platform:
+    needs: resolve-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu,  runner: ubuntu-24.04,     os: linux,  arch: x64,   pkg: nuwax-grok-build-linux-x64 }
+          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm, os: linux,  arch: arm64, pkg: nuwax-grok-build-linux-arm64 }
+          - { target: x86_64-apple-darwin,       runner: macos-13,         os: darwin, arch: x64,   pkg: nuwax-grok-build-darwin-x64 }
+          - { target: aarch64-apple-darwin,      runner: macos-14,         os: darwin, arch: arm64, pkg: nuwax-grok-build-darwin-arm64 }
+          - { target: x86_64-pc-windows-msvc,    runner: windows-2022,     os: win32,  arch: x64,   pkg: nuwax-grok-build-win32-x64 }
+    runs-on: ${{ matrix.runner }}
+    # Windows is best-effort: if its build fails, the rest of the release still ships.
+    continue-on-error: ${{ matrix.os == 'win32' }}
+    env:
+      # Bakes the tag version into the binary (see xai-grok-version / pager-bin build.rs).
+      GROK_VERSION: ${{ needs.resolve-version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: '29.3'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Rust toolchain
+        uses: rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Set package version
+        shell: bash
+        run: node npm/scripts/set-version.mjs "${{ needs.resolve-version.outputs.version }}"
+
+      - name: Build release binary
+        shell: bash
+        run: cargo build --release --locked -p xai-grok-pager-bin --target ${{ matrix.target }}
+
+      - name: Smoke test
+        shell: bash
+        env:
+          EXE: ${{ matrix.os == 'win32' && '.exe' || '' }}
+        continue-on-error: true
+        run: |
+          BIN="target/${{ matrix.target }}/release/xai-grok-pager${EXE}"
+          echo "binary: $BIN"
+          ls -lh "$BIN"
+          # A TUI may not expose --version; treat failure as informational, not blocking.
+          "$BIN" --version || true
+
+      - name: Stage platform package
+        shell: bash
+        env:
+          EXE: ${{ matrix.os == 'win32' && '.exe' || '' }}
+        run: |
+          set -euo pipefail
+          STAGE="stage/${{ matrix.pkg }}"
+          mkdir -p "$STAGE/bin"
+          cp "npm/${{ matrix.pkg }}/package.json" "$STAGE/package.json"
+          cp "npm/${{ matrix.pkg }}/index.js"     "$STAGE/index.js"
+          cp "target/${{ matrix.target }}/release/xai-grok-pager${EXE}" "$STAGE/bin/grok${EXE}"
+          echo "--- staged contents ---"
+          ls -lhR "$STAGE"
+
+      - name: Publish platform package
+        shell: bash
+        working-directory: stage/${{ matrix.pkg }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --tag ${{ inputs.npm-tag }}
+
+  # Publish the main launcher package after every platform package exists, so its
+  # optionalDependencies resolve. Skipped automatically if a required (non-win32)
+  # platform job fails; win32 failures are tolerated thanks to continue-on-error.
+  publish-main:
+    needs: [resolve-version, build-and-publish-platform]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Set package version
+        run: node npm/scripts/set-version.mjs "${{ needs.resolve-version.outputs.version }}"
+
+      - name: Publish main package
+        working-directory: npm/nuwax-grok-build
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --tag ${{ inputs.npm-tag }}
