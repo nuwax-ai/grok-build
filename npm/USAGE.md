@@ -44,7 +44,7 @@ nuwax-grok -V          # 验证，输出例如 grok 0.2.107 (...)
 | `GROK_MODEL_API_KEY` | API 密钥（Bearer 鉴权） | ✅ |
 | `GROK_DEFAULT_MODEL` | 默认模型（不设 `GROK_MODEL_ID` 时同时作为模型 id） | ✅ |
 | `GROK_MODEL_ID` | 模型 id，作为 `model` 字段发给 API（不设则用 `GROK_DEFAULT_MODEL`） | 否 |
-| `GROK_MODEL_API_BACKEND` | API 协议格式（见下表），默认 `chat_completions` | 否 |
+| `GROK_MODEL_API_BACKEND` | API 协议格式（**枚举**）：`chat_completions`=OpenAI `/v1/chat/completions`（**默认**，所有 OpenAI 兼容服务）/ `responses`=OpenAI `/v1/responses` / `messages`=Anthropic `/v1/messages` | 否 |
 | `GROK_MODEL_CONTEXT_WINDOW` | 上下文窗口大小（tokens） | 否 |
 | `GROK_MODEL_DISPLAY_NAME` | 在 UI 中显示的名字 | 否 |
 
@@ -55,14 +55,6 @@ GROK_DEFAULT_MODEL=deepseek-v4-flash
 GROK_MODEL_BASE_URL=https://api.deepseek.com/v1
 GROK_MODEL_API_KEY=sk-xxx
 ```
-
-### `GROK_MODEL_API_BACKEND` 取值
-
-| 值 | 对应接口 | 适用场景 |
-|----|----------|----------|
-| `chat_completions` | `/v1/chat/completions` | OpenAI 及所有兼容服务（DeepSeek、通义、智谱、Kimi、Ollama、vLLM 等）—— **默认** |
-| `responses` | `/v1/responses` | OpenAI Responses API |
-| `messages` | `/v1/messages` | Anthropic Claude |
 
 ---
 
