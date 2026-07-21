@@ -5,6 +5,9 @@ itself is a native Rust binary (`xai-grok-pager`). Upstream ships it as `grok`;
 this npm package exposes it as the **`nuwax-grok`** command so it can coexist
 with an official `grok` install (e.g. via Homebrew) without a command-name clash.
 
+> **End-user guide:** [USAGE.md](USAGE.md) — install via npm and use a custom LLM
+> (DeepSeek, OpenAI, Anthropic, Ollama, …) inside Zed / VS Code / Cursor.
+
 ## Layout
 
 ```
