@@ -1,15 +1,16 @@
 # npm distribution for `nuwax-grok-build`
 
 This directory holds the npm packaging layer for the Grok Build CLI. The CLI
-itself is a native Rust binary (`xai-grok-pager`, installed as `grok`); these
-packages make it installable from npm.
+itself is a native Rust binary (`xai-grok-pager`). Upstream ships it as `grok`;
+this npm package exposes it as the **`nuwax-grok`** command so it can coexist
+with an official `grok` install (e.g. via Homebrew) without a command-name clash.
 
 ## Layout
 
 ```
 npm/
   nuwax-grok-build/                 # main package — a thin Node launcher
-    package.json                    #   bin.grok + optionalDependencies
+    package.json                    #   bin.nuwax-grok + optionalDependencies
     bin.js                          #   picks the right platform binary, spawns it
   nuwax-grok-build-<os>-<arch>/     # one platform sub-package each
     package.json                    #   os/cpu constraints so npm only fetches a match
@@ -28,8 +29,8 @@ Platform sub-packages: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`,
    **optional dependency**, exactly the one platform sub-package matching the
    user's OS/arch. npm skips the others thanks to the `os`/`cpu` fields, so the
    install stays small and works offline (no postinstall download).
-2. Running `grok` executes `bin.js`, which requires the platform sub-package to
-   get its binary path and spawns it with inherited stdio — the TUI behaves
+2. Running `nuwax-grok` executes `bin.js`, which requires the platform sub-package
+   to get its binary path and spawns it with inherited stdio — the TUI behaves
    exactly like a direct invocation.
 
 ## Releasing

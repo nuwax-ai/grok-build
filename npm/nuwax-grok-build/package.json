@@ -21,7 +21,7 @@
     "tui"
   ],
   "bin": {
-    "grok": "bin.js"
+    "nuwax-grok": "bin.js"
   },
   "files": [
     "bin.js"
