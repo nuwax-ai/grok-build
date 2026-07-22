@@ -7,12 +7,18 @@
 
 PAGER_BIN_CRATE := crates/codegen/xai-grok-pager-bin
 
+# Bundle the local ripgrep (if present) so the xai-grok-shell build script does
+# NOT fetch rg from GitHub during the build (fails offline / behind a proxy).
+# Falls back to the download when rg is not on PATH.
+RG_PATH := $(shell command -v rg 2>/dev/null)
+RG_ENV := $(if $(RG_PATH),GROK_SHELL_BUNDLE_RG_PATH=$(RG_PATH))
+
 # Install the locally-built binary to ~/.cargo/bin as `xai-grok-pager`.
 # `--force` reinstalls even when the version is unchanged, so iterative
 # source edits are picked up without bumping the version.
 .PHONY: install-local
 install-local:
-	cargo install --path $(PAGER_BIN_CRATE) --locked --force
+	$(RG_ENV) cargo install --path $(PAGER_BIN_CRATE) --locked --force
 	@echo ''
 	@echo '✓ Installed xai-grok-pager to ~/.cargo/bin/'
 	@echo '  Verify:      xai-grok-pager -V'
@@ -22,12 +28,12 @@ install-local:
 # Fast type-check of the binary crate (no codegen) — quicker than install-local.
 .PHONY: check
 check:
-	cargo check -p xai-grok-pager-bin --locked
+	$(RG_ENV) cargo check -p xai-grok-pager-bin --locked
 
 # Release build of the binary into target/release/ (without installing).
 .PHONY: build
 build:
-	cargo build --release -p xai-grok-pager-bin --locked
+	$(RG_ENV) cargo build --release -p xai-grok-pager-bin --locked
 
 # Remove the locally-installed binary.
 .PHONY: uninstall-local
