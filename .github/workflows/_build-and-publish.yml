@@ -94,7 +94,19 @@ jobs:
 
       - name: Build release binary
         shell: bash
-        run: cargo build --release --locked -p xai-grok-pager-bin --target ${{ matrix.target }}
+        run: |
+          # Retry: the xai-grok-shell / xai-grok-tools build scripts fetch
+          # ripgrep from GitHub, which can transiently fail on the runners.
+          # Successful deps are cached, so retries only redo the failed step.
+          for attempt in 1 2 3 4; do
+            if cargo build --release --locked -p xai-grok-pager-bin --target ${{ matrix.target }}; then
+              exit 0
+            fi
+            echo "~~~ build attempt $attempt failed (often a flaky ripgrep download); retrying in 10s ~~~"
+            sleep 10
+          done
+          echo "::error::release build failed after 4 attempts"
+          exit 1
 
       - name: Smoke test
         shell: bash
@@ -127,7 +139,15 @@ jobs:
         working-directory: stage/${{ matrix.pkg }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --tag ${{ inputs.npm-tag }}
+        run: |
+          set -euo pipefail
+          NAME=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "$NAME@$VER" version >/dev/null 2>&1; then
+            echo "$NAME@$VER already published — skipping"
+          else
+            npm publish --access public --tag ${{ inputs.npm-tag }}
+          fi
 
   # Publish the main launcher package after every platform package exists, so its
   # optionalDependencies resolve. Skipped automatically if a required (non-win32)
@@ -152,4 +172,12 @@ jobs:
         working-directory: npm/nuwax-grok-build
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --tag ${{ inputs.npm-tag }}
+        run: |
+          set -euo pipefail
+          NAME=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "$NAME@$VER" version >/dev/null 2>&1; then
+            echo "$NAME@$VER already published — skipping"
+          else
+            npm publish --access public --tag ${{ inputs.npm-tag }}
+          fi
