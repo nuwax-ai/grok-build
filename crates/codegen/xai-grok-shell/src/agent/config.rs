@@ -2048,7 +2048,6 @@ impl Config {
             );
         }
 
-        config.model_override_warnings = model_override_warnings;
         config.config_warnings = config_warnings;
         config.auth_providers = auth_providers;
         config.model_providers = model_providers;
