@@ -1605,10 +1605,7 @@ fn install_heap_profile_hooks() {
     });
 }
 fn version_text(channel_label: &str) -> String {
-    format!(
-        "grok {}\n",
-        xai_grok_version::display_version(channel_label)
-    )
+    format!("{}\n", xai_grok_version::display_version(channel_label))
 }
 fn write_version(writer: &mut impl std::io::Write, channel_label: &str) -> std::io::Result<()> {
     writer.write_all(version_text(channel_label).as_bytes())
