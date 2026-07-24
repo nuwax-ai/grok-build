@@ -67,6 +67,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install system deps (Linux container)
+        # buildpack-deps:bookworm-curl lacks unzip (needed by setup-protoc) and
+        # ripgrep (used by the build scripts). Install both, and point the build
+        # scripts at the container's rg (correct arch) to skip the GitHub download.
+        if: matrix.container != ''
+        shell: bash
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends unzip ripgrep
+          echo "GROK_TOOLS_BUNDLE_RG_PATH=$(command -v rg)" >> "$GITHUB_ENV"
+          echo "GROK_SHELL_BUNDLE_RG_PATH=$(command -v rg)" >> "$GITHUB_ENV"
+
       - name: Install protoc
         uses: arduino/setup-protoc@v3
         with:
