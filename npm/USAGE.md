@@ -12,7 +12,7 @@
 
 ```bash
 npm install -g @nuwax-ai/nuwax-grok
-nuwax-grok -V          # 验证，输出例如 grok 0.2.107 (...)
+nuwax-grok -v          # 验证，输出版本号，例如 0.2.113
 ```
 
 **支持平台**：macOS（Apple Silicon / Intel）、Linux（x64 / arm64）。Windows 暂不支持。
