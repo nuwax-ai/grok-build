@@ -51,11 +51,11 @@ jobs:
         # - darwin-x64 cross-compiles x86_64-apple-darwin on an Apple Silicon
         #   (macos-14) runner; the macOS toolchain supports cross-arch natively.
         include:
-          - { target: x86_64-unknown-linux-gnu,  runner: ubuntu-24.04,     container: buildpack-deps:bookworm-curl, os: linux,  arch: x64,   pkg: nuwax-grok-build-linux-x64 }
-          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm, container: buildpack-deps:bookworm-curl, os: linux,  arch: arm64, pkg: nuwax-grok-build-linux-arm64 }
-          - { target: x86_64-apple-darwin,       runner: macos-14,         container: "",                            os: darwin, arch: x64,   pkg: nuwax-grok-build-darwin-x64 }
-          - { target: aarch64-apple-darwin,      runner: macos-14,         container: "",                            os: darwin, arch: arm64, pkg: nuwax-grok-build-darwin-arm64 }
-          - { target: x86_64-pc-windows-msvc,    runner: windows-2022,     container: "",                            os: win32,  arch: x64,   pkg: nuwax-grok-build-win32-x64 }
+          - { target: x86_64-unknown-linux-gnu,  runner: ubuntu-24.04,     container: buildpack-deps:bookworm-curl, os: linux,  arch: x64,   pkg: nuwax-grok-linux-x64 }
+          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm, container: buildpack-deps:bookworm-curl, os: linux,  arch: arm64, pkg: nuwax-grok-linux-arm64 }
+          - { target: x86_64-apple-darwin,       runner: macos-14,         container: "",                            os: darwin, arch: x64,   pkg: nuwax-grok-darwin-x64 }
+          - { target: aarch64-apple-darwin,      runner: macos-14,         container: "",                            os: darwin, arch: arm64, pkg: nuwax-grok-darwin-arm64 }
+          - { target: x86_64-pc-windows-msvc,    runner: windows-2022,     container: "",                            os: win32,  arch: x64,   pkg: nuwax-grok-win32-x64 }
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container }}
     # Windows is best-effort: if its build fails, the rest of the release still ships.
@@ -183,7 +183,7 @@ jobs:
         run: node npm/scripts/set-version.mjs "${{ needs.resolve-version.outputs.version }}"
 
       - name: Publish main package
-        working-directory: npm/nuwax-grok-build
+        working-directory: npm/nuwax-grok
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |

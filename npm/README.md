@@ -1,4 +1,4 @@
-# npm distribution for `nuwax-grok-build`
+# npm distribution for `@nuwax-ai/nuwax-grok`
 
 This directory holds the npm packaging layer for the Grok Build CLI. The CLI
 itself is a native Rust binary (`xai-grok-pager`). Upstream ships it as `grok`;
@@ -12,10 +12,10 @@ with an official `grok` install (e.g. via Homebrew) without a command-name clash
 
 ```
 npm/
-  nuwax-grok-build/                 # main package — a thin Node launcher
+  nuwax-grok/                          # main package (npm name: @nuwax-ai/nuwax-grok)
     package.json                    #   bin.nuwax-grok + optionalDependencies
     bin.js                          #   picks the right platform binary, spawns it
-  nuwax-grok-build-<os>-<arch>/     # one platform sub-package each
+  nuwax-grok-<os>-<arch>/              # platform sub-package (npm name: @nuwax-ai/nuwax-grok-<os>-<arch>)
     package.json                    #   os/cpu constraints so npm only fetches a match
     index.js                        #   exports the absolute path to the bundled binary
     bin/                            #   (filled by CI with the compiled `grok` binary)
@@ -28,7 +28,7 @@ Platform sub-packages: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`,
 
 ## How it works
 
-1. `npm install -g nuwax-grok-build` installs the main package plus, as an
+1. `npm install -g @nuwax-ai/nuwax-grok` installs the main package plus, as an
    **optional dependency**, exactly the one platform sub-package matching the
    user's OS/arch. npm skips the others thanks to the `os`/`cpu` fields, so the
    install stays small and works offline (no postinstall download).
@@ -43,8 +43,8 @@ the version). There are two pipelines under `.github/workflows/`:
 
 | Tag                   | Workflow              | npm dist-tag | Install                              |
 |-----------------------|-----------------------|--------------|--------------------------------------|
-| `v0.2.107-beta.1`     | `publish-beta.yml`    | `beta`       | `npm i -g nuwax-grok-build@beta`     |
-| `v0.2.107`            | `publish-stable.yml`  | `latest`     | `npm i -g nuwax-grok-build`          |
+| `v0.2.107-beta.1`     | `publish-beta.yml`    | `beta`       | `npm i -g @nuwax-ai/nuwax-grok@beta`     |
+| `v0.2.107`            | `publish-stable.yml`  | `latest`     | `npm i -g @nuwax-ai/nuwax-grok`          |
 
 Both call the reusable `_build-and-publish.yml`, which:
 
@@ -57,7 +57,7 @@ Both call the reusable `_build-and-publish.yml`, which:
 ### First-time setup
 
 - Create an npm **automation/granular access token** with publish rights for
-  `nuwax-grok-build` and the five `nuwax-grok-build-*` names, and add it as the
+  `@nuwax-ai/nuwax-grok` and the five `@nuwax-ai/nuwax-grok-*` names, and add it as the
   `NPM_TOKEN` repository (or organization) secret.
 - Confirm the six package names are available on the registry before first push.
 - Cut a tag and push it: `git tag v0.2.107-beta.1 && git push origin v0.2.107-beta.1`.

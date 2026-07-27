@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// Launcher for the `nuwax-grok-build` CLI.
+// Launcher for the `@nuwax-ai/nuwax-grok` CLI.
 //
 // The native binary is shipped in per-platform packages declared as
 // optionalDependencies. Each platform package's `main` exports the absolute
@@ -13,18 +13,18 @@ const { spawn } = require('node:child_process');
 
 /** Maps Node's `${process.platform}-${process.arch}` to the npm sub-package. */
 const PLATFORM_PACKAGES = {
-  'darwin-arm64': 'nuwax-grok-build-darwin-arm64',
-  'darwin-x64': 'nuwax-grok-build-darwin-x64',
-  'linux-arm64': 'nuwax-grok-build-linux-arm64',
-  'linux-x64': 'nuwax-grok-build-linux-x64',
-  'win32-x64': 'nuwax-grok-build-win32-x64',
+  'darwin-arm64': '@nuwax-ai/nuwax-grok-darwin-arm64',
+  'darwin-x64': '@nuwax-ai/nuwax-grok-darwin-x64',
+  'linux-arm64': '@nuwax-ai/nuwax-grok-linux-arm64',
+  'linux-x64': '@nuwax-ai/nuwax-grok-linux-x64',
+  'win32-x64': '@nuwax-ai/nuwax-grok-win32-x64',
 };
 
 const platformKey = `${process.platform}-${process.arch}`;
 const pkgName = PLATFORM_PACKAGES[platformKey];
 
 if (!pkgName) {
-  console.error(`nuwax-grok-build: no prebuilt binary for ${platformKey}.`);
+  console.error(`@nuwax-ai/nuwax-grok: no prebuilt binary for ${platformKey}.`);
   console.error('Supported: darwin-arm64, darwin-x64, linux-arm64, linux-x64, win32-x64.');
   process.exit(1);
 }
@@ -34,7 +34,7 @@ try {
   // Requiring the package runs its index.js, which returns the binary path.
   binPath = require(pkgName);
 } catch (err) {
-  console.error(`nuwax-grok-build: platform binary "${pkgName}" could not be loaded.`);
+  console.error(`@nuwax-ai/nuwax-grok: platform binary "${pkgName}" could not be loaded.`);
   console.error('This usually means it was not installed (e.g. --ignore-scripts, --omit=optional,');
   console.error('or a corporate npm mirror missing the package). Reinstall without those flags.');
   if (err && err.message) {
@@ -46,7 +46,7 @@ try {
 const child = spawn(binPath, process.argv.slice(2), { stdio: 'inherit' });
 
 child.on('error', (err) => {
-  console.error(`nuwax-grok-build: failed to launch binary at ${binPath}: ${err.message}`);
+  console.error(`@nuwax-ai/nuwax-grok: failed to launch binary at ${binPath}: ${err.message}`);
   process.exit(1);
 });
 

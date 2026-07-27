@@ -11,7 +11,7 @@
 要求：Node.js ≥ 18。
 
 ```bash
-npm install -g nuwax-grok-build
+npm install -g @nuwax-ai/nuwax-grok
 nuwax-grok -V          # 验证，输出例如 grok 0.2.107 (...)
 ```
 

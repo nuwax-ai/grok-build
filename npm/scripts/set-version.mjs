@@ -23,8 +23,8 @@ if (!/^\d+\.\d+\.\d+([-.+].*)?$/.test(version)) {
 }
 
 const npmRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const mainPkg = 'nuwax-grok-build';
-const platformPrefix = 'nuwax-grok-build-';
+const mainPkg = '@nuwax-ai/nuwax-grok';
+const platformPrefix = '@nuwax-ai/nuwax-grok-';
 
 let updated = 0;
 for (const entry of readdirSync(npmRoot)) {

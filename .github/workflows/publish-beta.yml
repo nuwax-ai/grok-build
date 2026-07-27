@@ -2,7 +2,7 @@
 #
 # Triggered by tags matching `v*-beta*` (e.g. v0.2.107-beta.1).
 # Publishes all packages with the `beta` dist-tag, so users opt in explicitly:
-#   npm install -g nuwax-grok-build@beta
+#   npm install -g @nuwax-ai/nuwax-grok@beta
 
 name: publish-beta
 
