@@ -6,3 +6,4 @@
 /stage/
 npm/**/node_modules/
 *.tgz
+.idea

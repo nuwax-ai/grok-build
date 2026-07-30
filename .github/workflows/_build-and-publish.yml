@@ -148,6 +148,16 @@ jobs:
           echo "--- staged contents ---"
           ls -lhR "$STAGE"
 
+      - name: Upload binary as workflow artifact (for GitHub Release)
+        # Only stable builds feed a GitHub Release; beta skips this.
+        if: inputs.npm-tag == 'latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuwax-grok-${{ matrix.os }}-${{ matrix.arch }}
+          path: stage/${{ matrix.pkg }}/bin/grok${{ matrix.os == 'win32' && '.exe' || '' }}
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Publish platform package
         shell: bash
         working-directory: stage/${{ matrix.pkg }}
@@ -195,3 +205,46 @@ jobs:
           else
             npm publish --access public --tag ${{ inputs.npm-tag }}
           fi
+
+  # Create a GitHub Release with downloadable per-platform binaries (stable only).
+  # Each platform job uploaded its binary as a workflow artifact; download them all,
+  # rename to nuwax-grok-<version>-<os>-<arch>, and attach to a Release on the tag.
+  # Beta publishes skip this entirely.
+  github-release:
+    needs: [resolve-version, build-and-publish-platform]
+    if: inputs.npm-tag == 'latest'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all platform binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: assets
+          pattern: nuwax-grok-*
+
+      - name: Flatten and rename binaries
+        shell: bash
+        env:
+          VER: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd assets
+          for d in */; do
+            plat="${d%/}"                     # e.g. nuwax-grok-linux-x64
+            short="${plat#nuwax-grok-}"       # e.g. linux-x64
+            if   [ -f "$d/grok.exe" ]; then mv "$d/grok.exe" "nuwax-grok-${VER}-${short}.exe"
+            elif [ -f "$d/grok" ];     then mv "$d/grok"     "nuwax-grok-${VER}-${short}"
+            else echo "::warning::no binary found under $plat"; fi
+          done
+          rm -rf */
+          echo "--- release assets ---"
+          ls -la
+
+      - name: Create GitHub Release with binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: assets/*
