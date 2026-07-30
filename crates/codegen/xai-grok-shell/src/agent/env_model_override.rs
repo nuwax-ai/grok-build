@@ -97,6 +97,8 @@ pub fn build_env_model_override() -> Option<(String, ConfigModelOverride)> {
         env_key: def.env_key.map(EnvKeys::single),
         auth_provider: None,
         model_provider: None,
+        query_params: Default::default(),
+        env_http_headers: Default::default(),
         api_base_url: None,
         max_completion_tokens: def.max_tokens,
         temperature: def.temperature,
