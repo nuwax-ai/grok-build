@@ -86,11 +86,18 @@ jobs:
 
       # Prefer the action-installed protoc over repo bin/protoc (DotSlash has no
       # Windows platforms; on Unix this also avoids depending on local DotSlash).
+      # On Windows, `command -v` returns a Git Bash (/c/...) path — convert to a
+      # Win32 path so native cargo build scripts can execute it.
       - name: Export PROTOC
         shell: bash
         run: |
+          set -euo pipefail
           PROTOC_BIN="$(command -v protoc)"
+          if command -v cygpath >/dev/null 2>&1; then
+            PROTOC_BIN="$(cygpath -w "$PROTOC_BIN")"
+          fi
           echo "PROTOC=${PROTOC_BIN}" >> "$GITHUB_ENV"
+          echo "Using PROTOC=${PROTOC_BIN}"
           protoc --version
 
       # Windows skips auto-download of ripgrep in build.rs; bundle an explicit
@@ -107,8 +114,10 @@ jobs:
           unzip -qo rg.zip
           RG_ABS="$(pwd)/${ASSET}/rg.exe"
           test -f "$RG_ABS"
-          echo "GROK_TOOLS_BUNDLE_RG_PATH=${RG_ABS}" >> "$GITHUB_ENV"
-          echo "GROK_SHELL_BUNDLE_RG_PATH=${RG_ABS}" >> "$GITHUB_ENV"
+          RG_WIN="$(cygpath -w "$RG_ABS")"
+          echo "GROK_TOOLS_BUNDLE_RG_PATH=${RG_WIN}" >> "$GITHUB_ENV"
+          echo "GROK_SHELL_BUNDLE_RG_PATH=${RG_WIN}" >> "$GITHUB_ENV"
+          echo "Bundling rg from ${RG_WIN}"
           "$RG_ABS" --version
 
       - name: Setup Rust toolchain

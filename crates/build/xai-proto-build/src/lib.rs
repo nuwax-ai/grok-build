@@ -1,9 +1,10 @@
 pub mod find_protoc;
 
 use anyhow::Context;
+use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::fs;
 
 /// Find the protoc well-known types include directory.
 ///
@@ -119,7 +120,14 @@ impl XaiProtoBuilder {
             );
         }
 
-        let temp_dir = tempfile::TempDir::new().context("temp dir for protoc dependency scan")?;
+        // Prefer OUT_DIR (always a native path under cargo) over the process
+        // temp dir — on Windows CI, Git Bash often exports MSYS-style TEMP/TMP
+        // that CreateFile rejects with ERROR_INVALID_NAME (os error 123).
+        let temp_parent = env::var_os("OUT_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(env::temp_dir);
+        let temp_dir = tempfile::TempDir::new_in(&temp_parent)
+            .with_context(|| format!("temp dir under {}", temp_parent.display()))?;
 
         // Can only process one input file when using --dependency_out=FILE.
         for (idx, proto) in protos.into_iter().enumerate() {
@@ -233,6 +241,11 @@ impl XaiProtoBuilder {
         // Use fixed version of `protoc` binary.
         if let Some(protoc) = &protoc {
             config.protoc_executable(protoc);
+            // Keep $PROTOC in sync. Git Bash CI may have exported an MSYS path
+            // (`/c/...`) that Win32 CreateProcess rejects; prost-build and our
+            // own Command spawns should both see a native-executable path.
+            // Build scripts are single-threaded.
+            unsafe { env::set_var("PROTOC", protoc) };
         }
 
         // Find the protoc's well-known types include directory.

@@ -40,11 +40,28 @@ pub fn find_protoc() -> anyhow::Result<Option<PathBuf>> {
     // 1. Check the PROTOC env var first. This is the standard override used by prost-build
     //    and is set by Bazel cargo_build_script build_script_env to point at a hermetic
     //    protoc binary instead of the dotslash wrapper.
+    //
+    // On Windows CI, Git Bash may export MSYS paths like `/c/hostedtoolcache/...`
+    // that are not valid Win32 paths — treat those as missing and fall through.
     if let Ok(protoc_env) = env::var("PROTOC") {
         let protoc = PathBuf::from(&protoc_env);
-        if protoc.try_exists()? {
-            check_protoc_good(&protoc)?;
-            return Ok(Some(protoc));
+        match protoc.try_exists() {
+            Ok(true) => match check_protoc_good(&protoc) {
+                Ok(()) => return Ok(Some(protoc)),
+                Err(e) => {
+                    eprintln!(
+                        "PROTOC=`{}` failed to execute: {e:#}; trying other protoc locations",
+                        protoc.display()
+                    );
+                }
+            },
+            Ok(false) => {}
+            Err(e) => {
+                eprintln!(
+                    "PROTOC=`{}` is not usable ({e}); trying other protoc locations",
+                    protoc.display()
+                );
+            }
         }
     }
 
