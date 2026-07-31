@@ -3,7 +3,7 @@ pub mod find_protoc;
 use anyhow::Context;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::{fs, iter};
+use std::fs;
 
 /// Find the protoc well-known types include directory.
 ///
@@ -101,6 +101,9 @@ impl XaiProtoBuilder {
     // - everything is invalidated when anything inside include directories is changed
     // - also they compute paths incorrectly: assuming paths are relative to current directory
     //   rather than
+    //
+    // Use temp files for `--dependency_out` / `--descriptor_set_out` instead of
+    // `/dev/stdout` and `/dev/null`, which do not exist on Windows.
     fn emit_rerun_if_changed<'a>(
         protoc: Option<&Path>,
         protoc_include_dir: Option<&Path>,
@@ -116,12 +119,23 @@ impl XaiProtoBuilder {
             );
         }
 
+        let temp_dir = tempfile::TempDir::new().context("temp dir for protoc dependency scan")?;
+
         // Can only process one input file when using --dependency_out=FILE.
-        for proto in protos {
+        for (idx, proto) in protos.into_iter().enumerate() {
+            let dep_file = temp_dir.path().join(format!("deps-{idx}.d"));
+            let desc_file = temp_dir.path().join(format!("desc-{idx}.pb"));
+
             let mut command = Command::new(protoc.unwrap_or(Path::new("protoc")));
             command
-                .arg("--dependency_out=/dev/stdout")
-                .arg("--descriptor_set_out=/dev/null");
+                .arg(format!(
+                    "--dependency_out={}",
+                    dep_file.to_str().context("dep path not UTF-8")?
+                ))
+                .arg(format!(
+                    "--descriptor_set_out={}",
+                    desc_file.to_str().context("desc path not UTF-8")?
+                ));
 
             // Add protoc's well-known types include directory first (if found).
             // This is needed for Bazel sandboxed builds where protoc and its
@@ -142,27 +156,39 @@ impl XaiProtoBuilder {
             command.stdin(Stdio::null());
             command.stderr(Stdio::inherit());
 
-            let output = command.output().context("protoc command failed")?;
-            if !output.status.success() {
+            let status = command.status().context("protoc command failed")?;
+            if !status.success() {
                 return Err(anyhow::anyhow!("protoc command failed"));
             }
 
-            let output =
-                String::from_utf8(output.stdout).context("protoc command output not UTF-8")?;
-
-            let mut lines = output.lines();
-            let first_line = lines.next().context("protoc command output is empty")?;
-            let prefix = "/dev/null:";
-            let rem = first_line.strip_prefix(prefix).with_context(|| {
-                format!("protoc command output must start with /dev/null: {output:?}")
+            let dep_contents = fs::read_to_string(&dep_file).with_context(|| {
+                format!(
+                    "failed to read protoc dependency file {}",
+                    dep_file.display()
+                )
             })?;
-            for line in iter::once(rem).chain(lines) {
+            if dep_contents.trim().is_empty() {
+                return Err(anyhow::anyhow!(
+                    "protoc dependency file is empty: {}",
+                    dep_file.display()
+                ));
+            }
+
+            // Makefile-style: `target: dep1 dep2 \` / `  dep3`
+            let (_, deps) = dep_contents.split_once(':').with_context(|| {
+                format!("protoc dependency file must contain ':': {dep_contents:?}")
+            })?;
+            let deps_flat = deps.replace("\\\r\n", " ").replace("\\\n", " ");
+            for line in deps_flat.split_whitespace() {
                 let line = line.trim();
-                let line = line.strip_suffix("\\").unwrap_or(line);
+                if line.is_empty() {
+                    continue;
+                }
                 // Depending on absolute paths like
                 // /Users/user/homebrew/Cellar/protobuf/29.1/include/google/protobuf/timestamp.proto
                 // is valid, but we want to have output more deterministic.
-                if line.contains("/include/google/protobuf/") {
+                let normalized = line.replace('\\', "/");
+                if normalized.contains("/include/google/protobuf/") {
                     continue;
                 }
 
