@@ -1591,6 +1591,8 @@ pub mod gc {
         #[allow(dead_code)]
         Unsupported,
         /// Enumerator failed or unusable — age path fail-closes.
+        /// Constructed by linux/macos `validate_cwd_scan` only.
+        #[allow(dead_code)]
         Failed,
     }
 
@@ -1599,6 +1601,7 @@ pub mod gc {
         force || matches!(scan, LiveCwdScan::Ok(_) | LiveCwdScan::Unsupported)
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn scan_contains_cwd(cwds: &[PathBuf], path: &Path) -> bool {
         let path_canon = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         cwds.iter().any(|c| {
@@ -1612,6 +1615,7 @@ pub mod gc {
     ///
     /// `current_dir()` errors also fail closed — we cannot confirm this
     /// process is outside every candidate path without knowing CWD.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn validate_cwd_scan(cwds: Vec<PathBuf>) -> LiveCwdScan {
         match std::env::current_dir() {
             Ok(cwd) if scan_contains_cwd(&cwds, &cwd) => LiveCwdScan::Ok(cwds),
