@@ -183,12 +183,10 @@ impl XaiProtoBuilder {
             }
 
             // Makefile-style: `target: dep1 dep2 \` / `  dep3`
-            let (_, deps) = dep_contents.split_once(':').with_context(|| {
-                format!("protoc dependency file must contain ':': {dep_contents:?}")
-            })?;
+            let (_, deps) = split_makefile_dependency(&dep_contents)?;
             let deps_flat = deps.replace("\\\r\n", " ").replace("\\\n", " ");
             for line in deps_flat.split_whitespace() {
-                let line = line.trim();
+                let line = line.trim().trim_end_matches('\\').trim();
                 if line.is_empty() {
                     continue;
                 }
@@ -200,7 +198,7 @@ impl XaiProtoBuilder {
                     continue;
                 }
 
-                if !fs::exists(line)? {
+                if !fs::exists(line).with_context(|| format!("stat dependency path {line:?}"))? {
                     return Err(anyhow::anyhow!("dependency file not found: {line}"));
                 }
 
@@ -329,5 +327,48 @@ pub fn configure() -> XaiProtoBuilder {
         pbjson_ignore_unknown_fields: false,
         pbjson_preserve_proto_field_names: false,
         file_descriptor_set_path: None,
+    }
+}
+
+/// Split a protoc `--dependency_out` makefile rule into `(target, deps)`.
+///
+/// On Windows the target is often `D:\path\out.pb: deps...`; a naive
+/// `split_once(':')` breaks on the drive letter and yields an invalid path
+/// (Win32 ERROR_INVALID_NAME / os error 123).
+fn split_makefile_dependency(contents: &str) -> anyhow::Result<(&str, &str)> {
+    let bytes = contents.as_bytes();
+    let mut search_from = 0;
+    if bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
+    {
+        search_from = 2;
+    }
+    let rel = contents[search_from..]
+        .find(':')
+        .with_context(|| format!("protoc dependency file must contain ':': {contents:?}"))?;
+    let abs = search_from + rel;
+    Ok((&contents[..abs], &contents[abs + 1..]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_makefile_dependency;
+
+    #[test]
+    fn split_unix_dependency() {
+        let (target, deps) =
+            split_makefile_dependency("/tmp/desc.pb: a.proto \\\n  b.proto\n").unwrap();
+        assert_eq!(target, "/tmp/desc.pb");
+        assert!(deps.contains("a.proto"));
+    }
+
+    #[test]
+    fn split_windows_drive_dependency() {
+        let (target, deps) =
+            split_makefile_dependency(r"D:\a\out\desc.pb: D:\a\proto\a.proto \").unwrap();
+        assert_eq!(target, r"D:\a\out\desc.pb");
+        assert!(deps.contains(r"D:\a\proto\a.proto"));
     }
 }
