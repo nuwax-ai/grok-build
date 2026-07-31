@@ -128,6 +128,10 @@ impl ParentPlan {
 pub(super) struct ParentAnchor {
     path: PathBuf,
     identity: FileIdentity,
+    /// Held open to pin the directory for this anchor's lifetime.
+    /// On Unix, `sync()` also fsyncs through this handle; on Windows the
+    /// field is intentionally unread (sync is a no-op) but still kept open.
+    #[cfg_attr(not(unix), allow(dead_code))]
     directory: fs::File,
 }
 
