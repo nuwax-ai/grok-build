@@ -127,10 +127,10 @@ jobs:
           target: ${{ matrix.target }}
           cache: false
 
-      # Workspace [profile.release] sets incremental=true; on MSVC that still emits
-      # /DEBUG PDBs for this binary and link.exe hits LNK1318 LIMIT (12). Publish
-      # builds do not need incremental caches or line-table PDBs on Windows.
-      # Also re-apply /PDBPAGESIZE: setup-rust-toolchain sets RUSTFLAGS=-D warnings,
+      # Workspace [profile.release] sets incremental=true. Even with debug=0, rustc
+      # still passes /DEBUG (natvis etc.) and MSVC link.exe hits LNK1318 LIMIT (12)
+      # on this binary. Force /DEBUG:NONE after rustc's /DEBUG (last wins).
+      # Also re-apply link args: setup-rust-toolchain sets RUSTFLAGS=-D warnings,
       # which replaces target rustflags from .cargo/config.toml.
       - name: Windows release profile (avoid PDB LNK1318)
         if: matrix.os == 'win32'
@@ -139,16 +139,15 @@ jobs:
           {
             echo "CARGO_PROFILE_RELEASE_DEBUG=0"
             echo "CARGO_PROFILE_RELEASE_INCREMENTAL=false"
-            echo "RUSTFLAGS=${RUSTFLAGS:+${RUSTFLAGS} }-C link-arg=/PDBPAGESIZE:8192"
+            echo "RUSTFLAGS=${RUSTFLAGS:+${RUSTFLAGS} }-C debuginfo=0 -C link-arg=/DEBUG:NONE"
           } >> "$GITHUB_ENV"
-          echo "Windows release: debug=0 incremental=false + PDBPAGESIZE=8192"
+          echo "Windows release: debuginfo=0 incremental=false /DEBUG:NONE"
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          # Bust Windows cache: prior release artifacts were built with incremental
-          # debug PDBs and can still trip LNK1318 at link time.
-          key: ${{ matrix.target }}${{ matrix.os == 'win32' && '-pdb-fix' || '' }}
+          # Bust Windows cache when PDB link flags change.
+          key: ${{ matrix.target }}${{ matrix.os == 'win32' && '-pdb-none' || '' }}
 
       - name: Setup Node
         uses: actions/setup-node@v4

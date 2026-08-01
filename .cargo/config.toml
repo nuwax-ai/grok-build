@@ -62,15 +62,16 @@ rustflags = [
 rustflags = [
     "-C", "force-unwind-tables=yes",
     "-C", "target-feature=+crt-static",
-    # Large rustc graphs can overflow default MSVC PDB type limits (LNK1318).
-    "-C", "link-arg=/PDBPAGESIZE:8192",
+    # Large graphs overflow MSVC PDB type limits (LNK1318); rustc still passes
+    # /DEBUG for natvis even with debug=0 — override so no PDB is written.
+    "-C", "link-arg=/DEBUG:NONE",
 ]
 
 [target.aarch64-pc-windows-msvc]
 rustflags = [
     "-C", "force-unwind-tables=yes",
     "-C", "target-feature=+crt-static",
-    "-C", "link-arg=/PDBPAGESIZE:8192",
+    "-C", "link-arg=/DEBUG:NONE",
 ]
 
 
