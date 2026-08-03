@@ -84,6 +84,42 @@ jobs:
           version: '29.3'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Prefer the action-installed protoc over repo bin/protoc (DotSlash has no
+      # Windows platforms; on Unix this also avoids depending on local DotSlash).
+      # On Windows, `command -v` returns a Git Bash (/c/...) path — convert to a
+      # Win32 path so native cargo build scripts can execute it.
+      - name: Export PROTOC
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROTOC_BIN="$(command -v protoc)"
+          if command -v cygpath >/dev/null 2>&1; then
+            PROTOC_BIN="$(cygpath -w "$PROTOC_BIN")"
+          fi
+          echo "PROTOC=${PROTOC_BIN}" >> "$GITHUB_ENV"
+          echo "Using PROTOC=${PROTOC_BIN}"
+          protoc --version
+
+      # Windows skips auto-download of ripgrep in build.rs; bundle an explicit
+      # rg.exe so the release binary still embeds search tooling when available.
+      - name: Install ripgrep (Windows)
+        if: matrix.os == 'win32'
+        shell: bash
+        run: |
+          set -euo pipefail
+          RG_VER=14.1.1
+          ASSET="ripgrep-${RG_VER}-x86_64-pc-windows-msvc"
+          curl -fsSL -o rg.zip \
+            "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VER}/${ASSET}.zip"
+          unzip -qo rg.zip
+          RG_ABS="$(pwd)/${ASSET}/rg.exe"
+          test -f "$RG_ABS"
+          RG_WIN="$(cygpath -w "$RG_ABS")"
+          echo "GROK_TOOLS_BUNDLE_RG_PATH=${RG_WIN}" >> "$GITHUB_ENV"
+          echo "GROK_SHELL_BUNDLE_RG_PATH=${RG_WIN}" >> "$GITHUB_ENV"
+          echo "Bundling rg from ${RG_WIN}"
+          "$RG_ABS" --version
+
       - name: Setup Rust toolchain
         # NOTE: the org is `actions-rust-lang`, not `rust-lang` (that repo does not exist).
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -91,10 +127,27 @@ jobs:
           target: ${{ matrix.target }}
           cache: false
 
+      # Workspace [profile.release] sets incremental=true. Even with debug=0, rustc
+      # still passes /DEBUG (natvis etc.) and MSVC link.exe hits LNK1318 LIMIT (12)
+      # on this binary. Force /DEBUG:NONE after rustc's /DEBUG (last wins).
+      # Also re-apply link args: setup-rust-toolchain sets RUSTFLAGS=-D warnings,
+      # which replaces target rustflags from .cargo/config.toml.
+      - name: Windows release profile (avoid PDB LNK1318)
+        if: matrix.os == 'win32'
+        shell: bash
+        run: |
+          {
+            echo "CARGO_PROFILE_RELEASE_DEBUG=0"
+            echo "CARGO_PROFILE_RELEASE_INCREMENTAL=false"
+            echo "RUSTFLAGS=${RUSTFLAGS:+${RUSTFLAGS} }-C debuginfo=0 -C link-arg=/DEBUG:NONE"
+          } >> "$GITHUB_ENV"
+          echo "Windows release: debuginfo=0 incremental=false /DEBUG:NONE"
+
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
+          # Bust Windows cache when PDB link flags change.
+          key: ${{ matrix.target }}${{ matrix.os == 'win32' && '-pdb-none' || '' }}
 
       - name: Setup Node
         uses: actions/setup-node@v4

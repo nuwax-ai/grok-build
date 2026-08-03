@@ -1,9 +1,10 @@
 pub mod find_protoc;
 
 use anyhow::Context;
+use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::{fs, iter};
 
 /// Find the protoc well-known types include directory.
 ///
@@ -101,6 +102,9 @@ impl XaiProtoBuilder {
     // - everything is invalidated when anything inside include directories is changed
     // - also they compute paths incorrectly: assuming paths are relative to current directory
     //   rather than
+    //
+    // Use temp files for `--dependency_out` / `--descriptor_set_out` instead of
+    // `/dev/stdout` and `/dev/null`, which do not exist on Windows.
     fn emit_rerun_if_changed<'a>(
         protoc: Option<&Path>,
         protoc_include_dir: Option<&Path>,
@@ -116,12 +120,30 @@ impl XaiProtoBuilder {
             );
         }
 
+        // Prefer OUT_DIR (always a native path under cargo) over the process
+        // temp dir — on Windows CI, Git Bash often exports MSYS-style TEMP/TMP
+        // that CreateFile rejects with ERROR_INVALID_NAME (os error 123).
+        let temp_parent = env::var_os("OUT_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(env::temp_dir);
+        let temp_dir = tempfile::TempDir::new_in(&temp_parent)
+            .with_context(|| format!("temp dir under {}", temp_parent.display()))?;
+
         // Can only process one input file when using --dependency_out=FILE.
-        for proto in protos {
+        for (idx, proto) in protos.into_iter().enumerate() {
+            let dep_file = temp_dir.path().join(format!("deps-{idx}.d"));
+            let desc_file = temp_dir.path().join(format!("desc-{idx}.pb"));
+
             let mut command = Command::new(protoc.unwrap_or(Path::new("protoc")));
             command
-                .arg("--dependency_out=/dev/stdout")
-                .arg("--descriptor_set_out=/dev/null");
+                .arg(format!(
+                    "--dependency_out={}",
+                    dep_file.to_str().context("dep path not UTF-8")?
+                ))
+                .arg(format!(
+                    "--descriptor_set_out={}",
+                    desc_file.to_str().context("desc path not UTF-8")?
+                ));
 
             // Add protoc's well-known types include directory first (if found).
             // This is needed for Bazel sandboxed builds where protoc and its
@@ -142,31 +164,41 @@ impl XaiProtoBuilder {
             command.stdin(Stdio::null());
             command.stderr(Stdio::inherit());
 
-            let output = command.output().context("protoc command failed")?;
-            if !output.status.success() {
+            let status = command.status().context("protoc command failed")?;
+            if !status.success() {
                 return Err(anyhow::anyhow!("protoc command failed"));
             }
 
-            let output =
-                String::from_utf8(output.stdout).context("protoc command output not UTF-8")?;
-
-            let mut lines = output.lines();
-            let first_line = lines.next().context("protoc command output is empty")?;
-            let prefix = "/dev/null:";
-            let rem = first_line.strip_prefix(prefix).with_context(|| {
-                format!("protoc command output must start with /dev/null: {output:?}")
+            let dep_contents = fs::read_to_string(&dep_file).with_context(|| {
+                format!(
+                    "failed to read protoc dependency file {}",
+                    dep_file.display()
+                )
             })?;
-            for line in iter::once(rem).chain(lines) {
-                let line = line.trim();
-                let line = line.strip_suffix("\\").unwrap_or(line);
+            if dep_contents.trim().is_empty() {
+                return Err(anyhow::anyhow!(
+                    "protoc dependency file is empty: {}",
+                    dep_file.display()
+                ));
+            }
+
+            // Makefile-style: `target: dep1 dep2 \` / `  dep3`
+            let (_, deps) = split_makefile_dependency(&dep_contents)?;
+            let deps_flat = deps.replace("\\\r\n", " ").replace("\\\n", " ");
+            for line in deps_flat.split_whitespace() {
+                let line = line.trim().trim_end_matches('\\').trim();
+                if line.is_empty() {
+                    continue;
+                }
                 // Depending on absolute paths like
                 // /Users/user/homebrew/Cellar/protobuf/29.1/include/google/protobuf/timestamp.proto
                 // is valid, but we want to have output more deterministic.
-                if line.contains("/include/google/protobuf/") {
+                let normalized = line.replace('\\', "/");
+                if normalized.contains("/include/google/protobuf/") {
                     continue;
                 }
 
-                if !fs::exists(line)? {
+                if !fs::exists(line).with_context(|| format!("stat dependency path {line:?}"))? {
                     return Err(anyhow::anyhow!("dependency file not found: {line}"));
                 }
 
@@ -207,6 +239,11 @@ impl XaiProtoBuilder {
         // Use fixed version of `protoc` binary.
         if let Some(protoc) = &protoc {
             config.protoc_executable(protoc);
+            // Keep $PROTOC in sync. Git Bash CI may have exported an MSYS path
+            // (`/c/...`) that Win32 CreateProcess rejects; prost-build and our
+            // own Command spawns should both see a native-executable path.
+            // Build scripts are single-threaded.
+            unsafe { env::set_var("PROTOC", protoc) };
         }
 
         // Find the protoc's well-known types include directory.
@@ -290,5 +327,48 @@ pub fn configure() -> XaiProtoBuilder {
         pbjson_ignore_unknown_fields: false,
         pbjson_preserve_proto_field_names: false,
         file_descriptor_set_path: None,
+    }
+}
+
+/// Split a protoc `--dependency_out` makefile rule into `(target, deps)`.
+///
+/// On Windows the target is often `D:\path\out.pb: deps...`; a naive
+/// `split_once(':')` breaks on the drive letter and yields an invalid path
+/// (Win32 ERROR_INVALID_NAME / os error 123).
+fn split_makefile_dependency(contents: &str) -> anyhow::Result<(&str, &str)> {
+    let bytes = contents.as_bytes();
+    let mut search_from = 0;
+    if bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
+    {
+        search_from = 2;
+    }
+    let rel = contents[search_from..]
+        .find(':')
+        .with_context(|| format!("protoc dependency file must contain ':': {contents:?}"))?;
+    let abs = search_from + rel;
+    Ok((&contents[..abs], &contents[abs + 1..]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_makefile_dependency;
+
+    #[test]
+    fn split_unix_dependency() {
+        let (target, deps) =
+            split_makefile_dependency("/tmp/desc.pb: a.proto \\\n  b.proto\n").unwrap();
+        assert_eq!(target, "/tmp/desc.pb");
+        assert!(deps.contains("a.proto"));
+    }
+
+    #[test]
+    fn split_windows_drive_dependency() {
+        let (target, deps) =
+            split_makefile_dependency(r"D:\a\out\desc.pb: D:\a\proto\a.proto \").unwrap();
+        assert_eq!(target, r"D:\a\out\desc.pb");
+        assert!(deps.contains(r"D:\a\proto\a.proto"));
     }
 }
